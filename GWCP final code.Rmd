@@ -1,0 +1,470 @@
+---
+title: "Group Weighted Conformal Prediction Simulations"
+author: "Aabesh Bhattacharyya"
+date: "1/5/2024"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+## Loading required packages
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+```
+
+```{r}
+## weighted quantile function
+wquantile <- function(x, probs, weights = NA) {
+  n <- length(x)
+  if (any(is.na(weights))){
+    weights <- rep(1 / n, n)
+  }
+  indexes <- order(x)
+  
+  weights <- weights[indexes]
+  
+  weights <- weights / sum(weights)
+  cdf.probs <- cumsum(c(0,weights))
+  
+  ind <- min(which(cdf.probs>=probs))
+  return(x[indexes[ind-1]])
+}
+```
+
+```{r}
+## function to run the uncorrected version of weighted cp with weights estimated using the calibration data
+## this returns 1 if the test point is contained in the interval and 0 otherwise for one run
+weighted_cp_uncorrected <- function(Z_train,Z,Z_test,L){
+    #mu <- mean(unlist(Z_train))
+    mu = 0
+    K <- length(Z)
+    n_K <- unlist(lapply(Z,length))
+    K_0 <- sum(n_K > 0)
+    n_K_0 <- n_K[n_K > 0]
+    wt.vec <- rep(1/(n_K_0),n_K_0)
+    wt.vec <- wt.vec/sum(wt.vec)
+    V <- abs(unlist(Z) - mu)
+    cutoff <- wquantile(unlist(V),1 - alpha,weights = wt.vec)
+    V_test <- abs(Z_test - mu)
+    pos_idx <- which(n_K>0)
+    if (V_test <= cutoff){
+      cover = 1
+    }else {cover = 0}
+    return (cover)
+}
+```
+
+```{r}
+## function to run the uncorrected version of weighted cp with weights estimated using the training/pre-training data
+## this returns 1 if the test point is contained in the interval and 0 otherwise for one run
+weighted_cp_train_uncorrected <- function(Z_train,Z,Z_test,L){
+    mu <- mean(unlist(Z_train))
+    #mu = 0
+    K <- length(Z)
+    n_K_train <- unlist(lapply(Z_train,length))
+    n_K <- unlist(lapply(Z,length))
+    K_0 <- sum(n_K > 0)
+    n_K_0 <- n_K[n_K > 0]
+    n_K_train_0 <- n_K_train[n_K > 0]
+    wt.vec <- rep(1/(n_K_train_0),n_K_0)
+    wt.vec <- wt.vec/sum(wt.vec)
+    V <- abs(unlist(Z) - mu)
+    cutoff <- wquantile(unlist(V),1 - alpha,weights = wt.vec)
+    V_test <- abs(Z_test - mu)
+    pos_idx <- which(n_K>0)
+    if (V_test <= cutoff){
+      cover = 1
+    }else {cover = 0}
+    return (cover)
+}
+```
+
+```{r}
+## function to run the uncorrected version of weighted cp with oracle weights 
+## this returns 1 if the test point is contained in the interval and 0 otherwise for one run
+weighted_cp_oracle_uncorrected <- function(Z_train,Z,Z_test,L,p){
+    mu = 0
+    #mu <- mean(unlist(Z_train))
+    K <- length(Z)
+    n_K <- unlist(lapply(Z,length))
+    K_0 <- sum(n_K > 0)
+    n_K_0 <- n_K[n_K > 0]
+    p_0 <- p[n_K>0]
+    wt.vec <- rep(1/p_0,n_K_0)
+    wt.vec <- wt.vec/sum(wt.vec)
+    V <- abs(unlist(Z) - mu)
+    cutoff <- wquantile(unlist(V),1 - alpha,weights = wt.vec)
+    V_test <- abs(Z_test - mu)
+    pos_idx <- which(n_K>0)
+    if (V_test <= cutoff){
+      cover = 1
+    }else {cover = 0}
+    return (cover)
+}
+```
+
+## Comparison of WCP with weights estimated differently - oracle, using training, calibration data (Appendix A.3)
+
+```{r}
+# forming the training data for the three cases
+set.seed(0)
+alpha = 0.2
+K <- 5
+n_train <- 100
+sigma = 1
+
+p <- list(3)
+p[[1]] <- c(0.2,0.2,0.2,0.2,0.2)
+p[[2]] <- c(0.4,0.25,0.2,0.1,0.05)
+p[[3]] <- c(0.4,0.25,0.2,0.1,0.05)
+
+theta <- list(3)
+theta[[1]] <- rev(seq(0,20,length.out = K))
+theta[[2]] <- rev(seq(0,20,length.out = K))
+theta[[3]] <- seq(0,20,length.out = K)
+
+Z_train <- vector(mode = "list",length = K)
+```
+
+
+```{r}
+N <- 2000       #N iterations used to find coverage
+n <- 100       # size of calibration data
+
+coverage_wt <- matrix(0,N,3)   #Finding coverage proportion 100 times for boxplot
+coverage_wt_oracle <- matrix(0,N,3)
+coverage_wt_valid <- matrix(0,N,3)
+for (j in 1:3){
+  n_K_train <- rmultinom(1,n_train,p[[j]])
+  for (k in 1:K){
+    Z_train[[k]] <- rnorm(n_K_train[k],theta[[j]][k],1)
+  }
+  for (i in 1:N){
+    n_K <- rmultinom(1,n,p[[j]])
+    Z <- vector(mode = "list",length = K)
+    for (m in 1:K){
+      Z[[m]] <- rnorm(n_K[m],theta[[j]][m],1)
+    }
+    L <- sample(K,1)
+    Z_test <- rnorm(1,theta[[j]][L],1)
+    coverage_wt[i,j] <- weighted_cp_train_uncorrected(Z_train,Z,Z_test,L)
+    coverage_wt_oracle[i,j] <- weighted_cp_oracle_uncorrected(Z_train,Z,Z_test,L,p[[j]])
+    coverage_wt_valid[i,j] <- weighted_cp_uncorrected(Z_train,Z,Z_test,L)
+  }
+}
+```
+
+
+```{r}
+colnames(coverage_wt) = colnames(coverage_wt_oracle) = colnames(coverage_wt_valid) = c("Setting 1", "Setting 2", "Setting 3")
+coverage_wt <- melt(coverage_wt) %>% group_by(Var2) %>% 
+  summarise(mean = mean(value),lb = mean(value) - 1.96*sqrt(mean(value)*(1-mean(value))/n()),
+            ub = mean(value) + 1.96*sqrt(mean(value)*(1-mean(value))/n()))
+
+coverage_wt_oracle <- melt(coverage_wt_oracle) %>% group_by(Var2) %>% 
+  summarise(mean = mean(value),lb = mean(value) - 1.96*sqrt(mean(value)*(1-mean(value))/n()),
+            ub = mean(value) + 1.96*sqrt(mean(value)*(1-mean(value))/n()))
+coverage_wt_valid <- melt(coverage_wt_valid) %>% group_by(Var2) %>% 
+  summarise(mean = mean(value),lb = mean(value) - 1.96*sqrt(mean(value)*(1-mean(value))/n()),
+            ub = mean(value) + 1.96*sqrt(mean(value)*(1-mean(value))/n()))
+
+coverage <- rbind(coverage_wt,coverage_wt_valid,coverage_wt_oracle)
+coverage$type <- as.factor(rep(c(1,2,3),rep(3,3)))
+levels(coverage$type) <- c("Pretraining","Calibration","Oracle")
+coverage$method <- rep(c("Pretraining","Calibration","Oracle"),rep(3,3))
+```
+
+
+```{r}
+ggplot(coverage,aes(x = type)) +
+  geom_errorbar(aes(ymin = lb, ymax = ub), width = 0.05,col = "blue") +
+  geom_point(aes(y = mean,col = "red")) +
+  facet_wrap(~Var2) + theme_bw() +
+  theme(strip.background = element_rect(color="black", fill="skyblue", size=2, linetype="solid")) +
+ theme(strip.text.x = element_text(size = 12))+ scale_x_discrete(labels=c("1" = "Pretraining", "2" = "Calibration","3" = "Oracle")) + xlab("\nWeight Estimation Procedure") + ylab("Coverage\n") + theme(plot.title = element_text(hjust = 0.5)) +  geom_hline(yintercept = 0.8, col = "black") + ylim(c(0.5,1)) + theme(axis.text=element_text(size=10),axis.title=element_text(size=12)) + theme(legend.position = "none") 
+#ggsave("~/Project with Rina/Uncorrected WCP Comparison.pdf",width = 8,height = 4,plot = last_plot())
+```
+
+## Adversarial setting for fixed group size GWCP in section 4.2 simulation
+
+```{r}
+set.seed(0)
+alpha = 0.2
+N <- 2000       #N iterations used to find coverage probability
+n_grp <- seq(5,50,5)
+coverage_wt_uncorrected_1 <- matrix(0,nrow = N,ncol = length(n_grp))
+coverage_wt_uncorrected_2 <- matrix(0,nrow = N,ncol = length(n_grp))
+coverage_wt_uncorrected_3 <- matrix(0,nrow = N,ncol = length(n_grp))
+for (K in n_grp){
+  n_1 <- 100*(K-1) + 1         # size of validation data
+  n_2 <- K
+  n_3 <- 100*K
+  n_K_1 <- rep(100,K)
+  n_K_1[0.8*K] <- 1      #choosing the smallest group adversarially
+  n_K_2 <- rep(1,K)
+  n_K_3 <- rep(100,K)
+  for (i in 1:N){
+      Z_1 <- vector(mode = "list",length = K)
+      Z_2 <- vector(mode = "list",length = K)
+      Z_3 <- vector(mode = "list",length = K)
+      for (m in 1:K){
+        Z_1[[m]] <- runif(n_K_1[m],(m-1)/K,m/K)
+        Z_2[[m]] <- runif(n_K_2[m],(m-1)/K,m/K)
+        Z_3[[m]] <- runif(n_K_3[m],(m-1)/K,m/K)
+      }
+      V_1 <- sort(abs(unlist(Z_1)))
+      V_2 <- sort(abs(unlist(Z_2)))
+      V_3 <- sort(abs(unlist(Z_3)))
+      cutoff_1 <- V_1[100*((1-alpha)*K-1)+1]
+      cutoff_2 <- V_2[(1-alpha)*K]
+      cutoff_3 <- V_3[100*(1-alpha)*K]
+      L <- sample(K,1)
+      V_test <- runif(1,(L-1)/K,L/K)
+      coverage_wt_uncorrected_1[i,(K/5)] <- ifelse(V_test <= cutoff_1,1,0)
+      coverage_wt_uncorrected_2[i,(K/5)] <- ifelse(V_test <= cutoff_2,1,0)
+      coverage_wt_uncorrected_3[i,(K/5)] <- ifelse(V_test <= cutoff_3,1,0)
+  }
+}
+
+colnames(coverage_wt_uncorrected_1) <- n_grp
+colnames(coverage_wt_uncorrected_2) <- n_grp
+colnames(coverage_wt_uncorrected_3) <- n_grp
+coverage_wt_uncorrected_1 <- data.frame(coverage_wt_uncorrected_1)
+coverage_wt_uncorrected_2 <- data.frame(coverage_wt_uncorrected_2)
+coverage_wt_uncorrected_3 <- data.frame(coverage_wt_uncorrected_3)
+data_1 <- melt(coverage_wt_uncorrected_1) %>% group_by(variable) %>% 
+         summarise(mean = mean(value),lb = mean(value) - 1.96*sqrt(mean(value)*(1-mean(value))/n()),
+            ub = mean(value) + 1.96*sqrt(mean(value)*(1-mean(value))/n()))
+data_2 <- melt(coverage_wt_uncorrected_2) %>% group_by(variable) %>% 
+         summarise(mean = mean(value),lb = mean(value) - 1.96*sqrt(mean(value)*(1-mean(value))/n()),
+            ub = mean(value) + 1.96*sqrt(mean(value)*(1-mean(value))/n()))
+data_3 <- melt(coverage_wt_uncorrected_3) %>% group_by(variable) %>% 
+         summarise(mean = mean(value),lb = mean(value) - 1.96*sqrt(mean(value)*(1-mean(value))/n()),
+            ub = mean(value) + 1.96*sqrt(mean(value)*(1-mean(value))/n()))
+data_1$group_size <- n_grp
+data_2$group_size <- n_grp
+data_3$group_size <- n_grp
+data <- rbind(data_2,data_1,data_3)
+data$type <- as.factor(c(rep(1,nrow(data_1)),rep(2,nrow(data_2)),rep(3,nrow(data_3))))
+levels(data$type) = c("AllSmall","OneSmall","NoneSmall")
+```
+
+```{r}
+ggplot(data,aes(x = group_size)) + 
+  geom_errorbar(aes(ymin = lb, ymax = ub), width = 1, color = "blue") +
+  geom_point(aes(y = mean), color = "red") +
+  facet_wrap(~type) + theme_bw() + ylim(c(0.5,1))+
+    theme(strip.background = element_rect(color="black", fill="skyblue", size=2, linetype="solid"))+
+  theme(strip.text.x = element_text(size = 16))+
+  geom_hline(yintercept = 0.8, col = "black") + xlab("\nNo. of Groups(K)") + ylab("Coverage\n") +
+  theme(plot.title = element_text(hjust = 0.5)) + theme(axis.text=element_text(size=12),axis.title=element_text(size=12)) 
+#ggsave("~/Project with Rina/GWCP_coverage_fixed.pdf",width = 8,height = 4,plot = last_plot())
+```
+
+
+# Comparing our lower bound and existing lower bound in terms of convergence to (1-alpha) 
+
+
+```{r}
+alpha = 0.1
+### k = constant = 10
+n_seq <- seq(100,1000,10)
+n_seq_len <- length(n_seq)
+wcp_prelim_1 <- numeric(n_seq_len)
+wcp_gwcp_1 <- numeric(n_seq_len)
+for (n in n_seq){
+  k = 10
+  p <- rep(1/k,k)
+  coverage <- numeric(100)
+  for (i in 1:100){
+      n_k_0 <- rmultinom(1,n,p)
+      coverage[i] <- 1 - alpha - 0.5*sum(abs((p/(n_k_0+1))/sum(p/(n_k_0+1))-p))
+  }
+  wcp_prelim_1[(n-100)/10+1] <- mean(coverage)
+  coverage <- numeric(100)
+  for (j in 1:100){
+    n_k <- rmultinom(1,n,p)
+    S_k <- which(n_k>0)
+    K_0 <- length(S_k)
+    coverage[j] <- (K_0/k)*(1-alpha) - (1/k)*(1/min(n_k[S_k]))
+  }
+  wcp_gwcp_1[(n-100)/10+1] = mean(coverage)
+}
+
+### k = sqrt(n)
+wcp_prelim_2 <- numeric(n_seq_len)
+wcp_gwcp_2 <- numeric(n_seq_len)
+for (n in n_seq){
+  k = floor(sqrt(n))
+  p <- rep(1/k,k)
+  coverage <- numeric(100)
+  for (i in 1:100){
+      n_k_0 <- rmultinom(1,n,p)
+      coverage[i] <- 1 - alpha - 0.5*sum(abs((p/(n_k_0+1))/sum(p/(n_k_0+1))-p))
+  }
+  wcp_prelim_2[(n-100)/10+1] <- mean(coverage)
+  coverage <- numeric(100)
+  for (j in 1:100){
+    n_k <- rmultinom(1,n,p)
+    S_k <- which(n_k>0)
+    K_0 <- length(S_k)
+    coverage[j] <- (K_0/k)*(1-alpha) - (1/k)*(1/min(n_k[S_k]))
+  }
+  wcp_gwcp_2[(n-100)/10+1] = mean(coverage)
+}
+
+#### k = n/10
+wcp_prelim_3 <- numeric(n_seq_len)
+wcp_gwcp_3 <- numeric(n_seq_len)
+for (n in n_seq){
+  k = n/10
+  p <- rep(1/k,k)
+  coverage <- numeric(100)
+  for (i in 1:100){
+      n_k_0 <- rmultinom(1,n,p)
+      coverage[i] <- 1 - alpha - 0.5*sum(abs((p/(n_k_0+1))/sum(p/(n_k_0+1))-p))
+  }
+  wcp_prelim_3[(n-100)/10 +1] <- mean(coverage)
+  coverage <- numeric(100)
+  for (j in 1:500){
+    n_k <- rmultinom(1,n,p)
+    S_k <- which(n_k>0)
+    K_0 <- length(S_k)
+    coverage[j] <- (K_0/k)*(1-alpha) - (1/k)*(1/min(n_k[S_k]))
+  }
+  wcp_gwcp_3[(n-100)/10 +1] = mean(coverage)
+}
+```
+
+```{r}
+## Plot of wcp lower bound in section 3.2
+alpha = 0.1
+data1 <- data.frame(coverage = c(wcp_prelim_1,wcp_prelim_2,wcp_prelim_3),type = as.factor(c(rep(1,n_seq_len),rep(2,n_seq_len),rep(3,n_seq_len))))
+data1$no.of.observations <- rep(n_seq,3)
+ggplot(data1,aes(y = coverage,x = no.of.observations,col = type)) + geom_line() + 
+  geom_hline(yintercept = 1-alpha, col = "black",size = 1) + xlab("\nNumber of Observations(n)") + ylab("Coverage Lower Bound\n") + theme_bw() + ylim(c(0.75,0.92))+
+  scale_colour_manual(values = c('1' = 'red','2' = 'green', '3' = "blue"),name = 'No. of Groups', 
+          labels = c(expression(K == 10), expression(K == sqrt(n)),expression(K == frac(n,10))))
+#ggsave("~/Project with Rina/WCP lower bound.pdf",width = 6, height = 4,plot = last_plot())
+```
+
+```{r}
+## plot comparing wcp lower bound and our lower bound for 3 regimes of k in section 5.3
+alpha = 0.1
+#library(reshape2)
+lbd_1 <- data.frame(Existing = wcp_prelim_1, Ours = wcp_gwcp_1)
+lbd_2 <- data.frame(Existing = wcp_prelim_2, Ours = wcp_gwcp_2)
+lbd_3 <- data.frame(Existing = wcp_prelim_3, Ours = wcp_gwcp_3)
+data_1 <- melt(lbd_1)
+data_2 <- melt(lbd_2)
+data_3 <- melt(lbd_3)
+data <- rbind(data_1,data_2,data_3)
+data$no_of_obs <- rep(n_seq,6)
+data$type = as.factor(c(rep(1,nrow(data_1)),rep(2,nrow(data_2)),rep(3,nrow(data_3))))
+levels(data$type) = c(expression(K == 10), expression(K == sqrt(n)),expression(K == frac(n,10)))
+```
+
+```{r}
+ggplot(data,aes(y=value,x = no_of_obs, col = variable)) + geom_line()  +
+  facet_wrap(~type,label = labeller(.default = label_parsed,.multi_line = TRUE)) + theme_bw() + 
+  scale_color_manual(name = "Coverage Guarantee", labels = c("Existing","Using GWCP"),
+                     values = c("Existing" = "plum", "Ours" = "#008080")) +
+  theme(strip.background = element_rect(color="black", fill="#99CCFF", size=2, linetype="solid"))+
+  theme(strip.text.x = element_text(size = 10))+
+  geom_hline(yintercept = 1-alpha, col = "red",size = 1.1) + xlab("\nSize of Training Data(n)") + ylab("Coverage Lower Bound\n") + theme(plot.title = element_text(hjust = 0.5)) +
+  theme(axis.text=element_text(size=12),axis.title=element_text(size=12)) +
+  theme(legend.title = element_text(size=10),legend.text = element_text(size=10))
+#ggsave("~/Project with Rina/Lower Bound Comparison.pdf",width = 10,height = 4,plot = last_plot())
+```
+
+
+## Corrected GWCP, Appendix A.5 
+
+```{r}
+set.seed(0)
+alpha = 0.2
+N <- 2000       #N iterations used to find coverage probability
+n_grp <- seq(5,50,5)
+coverage_wt_uncorrected_1 <- matrix(0,nrow = N,ncol = length(n_grp))
+coverage_wt_uncorrected_2 <- matrix(0,nrow = N,ncol = length(n_grp))
+coverage_wt_uncorrected_3 <- matrix(0,nrow = N,ncol = length(n_grp))
+for (K in n_grp){
+  alpha_K_1 <- rep(alpha,K)
+  alpha_K_2 <- rep(alpha,K)
+  alpha_K_3 <- rep(alpha,K)
+  n_1 <- 100*(K-1) + 1         # size of validation data
+  n_2 <- K
+  n_3 <- 100*K
+  n_K_1 <- rep(100,K)
+  n_K_1[0.8*K] <- 1      #choosing the smallest group adversarially
+  n_K_2 <- rep(1,K)
+  n_K_3 <- rep(100,K)
+  for (i in 1:N){
+    Z_1 <- vector(mode = "list",length = K)
+    Z_2 <- vector(mode = "list",length = K)
+    Z_3 <- vector(mode = "list",length = K)
+    for (m in 1:K){
+      Z_1[[m]] <- runif(n_K_1[m],(m-1)/K,m/K)
+      Z_2[[m]] <- runif(n_K_2[m],(m-1)/K,m/K)
+      Z_3[[m]] <- runif(n_K_3[m],(m-1)/K,m/K)
+    }
+    V_1 <- sort(abs(unlist(Z_1)))
+    V_2 <- sort(abs(unlist(Z_2)))
+    V_3 <- sort(abs(unlist(Z_3)))
+    L <- sample(K,1)
+    V_test <- runif(1,(L-1)/K,L/K)
+    if (L == 0.8*K){
+        cutoff_1 <- V_1[100*((1-alpha)*K-1)+101]        ## (1 - alpha_k) quantile occurs is this value
+    }else {cutoff_1 <- V_1[100*((1-alpha)*K-1)+2]}
+    cutoff_2 <- V_2[(1-alpha)*K+1]
+    cutoff_3 <- V_3[100*(1-alpha)*K+1]
+    coverage_wt_uncorrected_1[i,(K/5)] <- ifelse(V_test <= cutoff_1,1,0)
+    coverage_wt_uncorrected_2[i,(K/5)] <- ifelse(V_test <= cutoff_2,1,0)
+    coverage_wt_uncorrected_3[i,(K/5)] <- ifelse(V_test <= cutoff_3,1,0)
+  }
+}
+
+colnames(coverage_wt_uncorrected_1) <- n_grp
+colnames(coverage_wt_uncorrected_2) <- n_grp
+colnames(coverage_wt_uncorrected_3) <- n_grp
+coverage_wt_uncorrected_1 <- data.frame(coverage_wt_uncorrected_1)
+coverage_wt_uncorrected_2 <- data.frame(coverage_wt_uncorrected_2)
+coverage_wt_uncorrected_3 <- data.frame(coverage_wt_uncorrected_3)
+data_1 <- melt(coverage_wt_uncorrected_1) %>% group_by(variable) %>% 
+         summarise(mean = mean(value),lb = mean(value) - 1.96*sqrt(mean(value)*(1-mean(value))/n()),
+            ub = mean(value) + 1.96*sqrt(mean(value)*(1-mean(value))/n()))
+data_2 <- melt(coverage_wt_uncorrected_2) %>% group_by(variable) %>% 
+         summarise(mean = mean(value),lb = mean(value) - 1.96*sqrt(mean(value)*(1-mean(value))/n()),
+            ub = mean(value) + 1.96*sqrt(mean(value)*(1-mean(value))/n()))
+data_3 <- melt(coverage_wt_uncorrected_3) %>% group_by(variable) %>% 
+         summarise(mean = mean(value),lb = mean(value) - 1.96*sqrt(mean(value)*(1-mean(value))/n()),
+            ub = mean(value) + 1.96*sqrt(mean(value)*(1-mean(value))/n()))
+data_1$group_size <- n_grp
+data_2$group_size <- n_grp
+data_3$group_size <- n_grp
+data <- rbind(data_2,data_1,data_3)
+data$type <- as.factor(c(rep(1,nrow(data_1)),rep(2,nrow(data_2)),rep(3,nrow(data_3))))
+levels(data$type) = c("AllSmall","OneSmall","NoneSmall")
+```
+
+
+```{r}
+ggplot(data,aes(x = group_size)) + 
+  geom_errorbar(aes(ymin = lb, ymax = ub), width = 1, color = "blue") +
+  geom_point(aes(y = mean,col = "red")) + ylim(c(0.5,1))+
+  facet_wrap(~type) + theme_bw() + 
+    theme(strip.background = element_rect(color="black", fill="skyblue", size=2, linetype="solid"))+
+  theme(strip.text.x = element_text(size = 12))+
+  geom_hline(yintercept = 0.8, col = "black") + xlab("\nNo. of Groups(K)") + ylab("Coverage\n") +
+  theme(plot.title = element_text(hjust = 0.5)) + theme(legend.position = "None")+ theme(axis.text=element_text(size=12),axis.title=element_text(size=12)) 
+#ggsave("~/Project with Rina/Corrected GWCP New.pdf",width = 8,height = 4,plot = last_plot())
+```
+
+
+
+
+
