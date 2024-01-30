@@ -185,7 +185,7 @@ ggplot(coverage,aes(x = type)) +
   geom_point(aes(y = mean,col = "red")) +
   facet_wrap(~Var2) + theme_bw() +
   theme(strip.background = element_rect(color="black", fill="skyblue", size=2, linetype="solid")) +
- theme(strip.text.x = element_text(size = 12))+ scale_x_discrete(labels=c("1" = "Pretraining", "2" = "Calibration","3" = "Oracle")) + xlab("Weight estimation procedure") + ylab("Coverage\n") + theme(plot.title = element_text(hjust = 0.5)) +  geom_hline(yintercept = 0.8, col = "black") + ylim(c(0.5,1)) + theme(axis.text = element_text(size = 13),
+ theme(strip.text.x = element_text(size = 13))+ scale_x_discrete(labels=c("1" = "Pretraining", "2" = "Calibration","3" = "Oracle")) + xlab("Weight estimation procedure") + ylab("Coverage\n") + theme(plot.title = element_text(hjust = 0.5)) +  geom_hline(yintercept = 0.8, col = "black") + ylim(c(0.5,1)) + theme(axis.text = element_text(size = 13),
         axis.title = element_text(size = 13),
         axis.title.x = element_text(vjust = -1),
         axis.text.x = element_text(hjust = c(0.6, 0.4, 0.4), margin = margin(t = 1, b = 1))) +  # Adjust margin values as needed
