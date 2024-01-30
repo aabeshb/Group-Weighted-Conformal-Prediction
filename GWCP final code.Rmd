@@ -185,8 +185,12 @@ ggplot(coverage,aes(x = type)) +
   geom_point(aes(y = mean,col = "red")) +
   facet_wrap(~Var2) + theme_bw() +
   theme(strip.background = element_rect(color="black", fill="skyblue", size=2, linetype="solid")) +
- theme(strip.text.x = element_text(size = 12))+ scale_x_discrete(labels=c("1" = "Pretraining", "2" = "Calibration","3" = "Oracle")) + xlab("\nWeight Estimation Procedure") + ylab("Coverage\n") + theme(plot.title = element_text(hjust = 0.5)) +  geom_hline(yintercept = 0.8, col = "black") + ylim(c(0.5,1)) + theme(axis.text=element_text(size=10),axis.title=element_text(size=12)) + theme(legend.position = "none") 
-#ggsave("~/Project with Rina/Uncorrected WCP Comparison.pdf",width = 8,height = 4,plot = last_plot())
+ theme(strip.text.x = element_text(size = 12))+ scale_x_discrete(labels=c("1" = "Pretraining", "2" = "Calibration","3" = "Oracle")) + xlab("Weight estimation procedure") + ylab("Coverage\n") + theme(plot.title = element_text(hjust = 0.5)) +  geom_hline(yintercept = 0.8, col = "black") + ylim(c(0.5,1)) + theme(axis.text = element_text(size = 13),
+        axis.title = element_text(size = 13),
+        axis.title.x = element_text(vjust = -1),
+        axis.text.x = element_text(hjust = c(0.6, 0.4, 0.4), margin = margin(t = 1, b = 1))) +  # Adjust margin values as needed
+  theme(legend.position = "none")
+ggsave("~/Project with Rina/Uncorrected WCP Comparison.pdf",width = 9,height = 4,plot = last_plot())
 ```
 
 ## Adversarial setting for fixed group size GWCP in section 4.2 simulation
@@ -259,10 +263,12 @@ ggplot(data,aes(x = group_size)) +
   geom_point(aes(y = mean), color = "red") +
   facet_wrap(~type) + theme_bw() + ylim(c(0.5,1))+
     theme(strip.background = element_rect(color="black", fill="skyblue", size=2, linetype="solid"))+
-  theme(strip.text.x = element_text(size = 16))+
-  geom_hline(yintercept = 0.8, col = "black") + xlab("\nNo. of Groups(K)") + ylab("Coverage\n") +
-  theme(plot.title = element_text(hjust = 0.5)) + theme(axis.text=element_text(size=12),axis.title=element_text(size=12)) 
-#ggsave("~/Project with Rina/GWCP_coverage_fixed.pdf",width = 8,height = 4,plot = last_plot())
+  theme(strip.text.x = element_text(size = 12))+
+  geom_hline(yintercept = 0.8, col = "black") + xlab(expression(paste("\nNumber of groups ",italic(K)))) + ylab("Coverage\n") +
+  theme(plot.title = element_text(hjust = 0.5)) + theme(axis.text=element_text(size=12),axis.title=element_text(size=12)) +
+  theme(legend.title = element_text(size=12),legend.text = element_text(size=12))+
+  theme(axis.title.x = element_text(vjust = -1))
+ggsave("~/Project with Rina/GWCP_coverage_fixed.pdf",width = 8,height = 4,plot = last_plot())
 ```
 
 
@@ -346,10 +352,16 @@ alpha = 0.1
 data1 <- data.frame(coverage = c(wcp_prelim_1,wcp_prelim_2,wcp_prelim_3),type = as.factor(c(rep(1,n_seq_len),rep(2,n_seq_len),rep(3,n_seq_len))))
 data1$no.of.observations <- rep(n_seq,3)
 ggplot(data1,aes(y = coverage,x = no.of.observations,col = type)) + geom_line() + 
-  geom_hline(yintercept = 1-alpha, col = "black",size = 1) + xlab("\nNumber of Observations(n)") + ylab("Coverage Lower Bound\n") + theme_bw() + ylim(c(0.75,0.92))+
-  scale_colour_manual(values = c('1' = 'red','2' = 'green', '3' = "blue"),name = 'No. of Groups', 
-          labels = c(expression(K == 10), expression(K == sqrt(n)),expression(K == frac(n,10))))
-#ggsave("~/Project with Rina/WCP lower bound.pdf",width = 6, height = 4,plot = last_plot())
+  geom_hline(yintercept = 1-alpha, col = "black") + 
+  xlab(expression(paste("\nNumber of observations ", italic(n))))  + ylab("Lower bound on coverage (prior work)\n") + theme_bw() + ylim(c(0.75,0.92))+ theme(axis.text=element_text(size=11),axis.title=element_text(size=11))+
+  scale_colour_manual(values = c('1' = 'red', '2' = 'green', '3' = "blue"),
+                      name = 'Number of Groups', 
+                      labels = c(bquote(italic(K) == italic(10)),
+                                 bquote(italic(K) == group(lfloor, italic(sqrt(n)), rfloor)),
+                                 bquote(italic(K) == frac(italic(n), italic(10)))))+
+  theme(legend.title = element_text(size=11),legend.text = element_text(size=11))+
+  theme(axis.title.x = element_text(vjust = -1))
+ggsave("~/Project with Rina/WCP lower bound.pdf",width = 6, height = 4,plot = last_plot())
 ```
 
 ```{r}
@@ -365,20 +377,24 @@ data_3 <- melt(lbd_3)
 data <- rbind(data_1,data_2,data_3)
 data$no_of_obs <- rep(n_seq,6)
 data$type = as.factor(c(rep(1,nrow(data_1)),rep(2,nrow(data_2)),rep(3,nrow(data_3))))
-levels(data$type) = c(expression(K == 10), expression(K == sqrt(n)),expression(K == frac(n,10)))
+levels(data$type) = c(expression(italic(K) == italic(10)),
+                      expression(italic(K) == group(lfloor, italic(sqrt(n)), rfloor)),
+                      expression(italic(K) == frac(italic(n), italic(10))))
+levels(data$variable) = c("Prior work","New result")
 ```
 
 ```{r}
 ggplot(data,aes(y=value,x = no_of_obs, col = variable)) + geom_line()  +
   facet_wrap(~type,label = labeller(.default = label_parsed,.multi_line = TRUE)) + theme_bw() + 
-  scale_color_manual(name = "Coverage Guarantee", labels = c("Existing","Using GWCP"),
-                     values = c("Existing" = "plum", "Ours" = "#008080")) +
+  scale_color_manual(name = "", labels = c("Prior work","New result"),
+                     values = c("Prior work" = "red", "New result" = "blue")) +
   theme(strip.background = element_rect(color="black", fill="#99CCFF", size=2, linetype="solid"))+
-  theme(strip.text.x = element_text(size = 10))+
-  geom_hline(yintercept = 1-alpha, col = "red",size = 1.1) + xlab("\nSize of Training Data(n)") + ylab("Coverage Lower Bound\n") + theme(plot.title = element_text(hjust = 0.5)) +
-  theme(axis.text=element_text(size=12),axis.title=element_text(size=12)) +
-  theme(legend.title = element_text(size=10),legend.text = element_text(size=10))
-#ggsave("~/Project with Rina/Lower Bound Comparison.pdf",width = 10,height = 4,plot = last_plot())
+  theme(strip.text.x = element_text(size = 17))+
+  geom_hline(yintercept = 1-alpha, col = "black") + xlab(expression(paste("\nNumber of observations ", italic(n)))) + ylab("Guaranteed lower bound on coverage\n") + theme(plot.title = element_text(hjust = 0.5)) +
+  theme(axis.text=element_text(size=17),axis.title=element_text(size=17)) +
+  theme(legend.title = element_text(size=17),legend.text = element_text(size=17))+
+  theme(axis.title.x = element_text(vjust = -1))
+ggsave("~/Project with Rina/Lower Bound Comparison.pdf",width = 12,height = 5,plot = last_plot())
 ```
 
 
@@ -455,13 +471,15 @@ levels(data$type) = c("AllSmall","OneSmall","NoneSmall")
 ```{r}
 ggplot(data,aes(x = group_size)) + 
   geom_errorbar(aes(ymin = lb, ymax = ub), width = 1, color = "blue") +
-  geom_point(aes(y = mean,col = "red")) + ylim(c(0.5,1))+
-  facet_wrap(~type) + theme_bw() + 
+  geom_point(aes(y = mean), color = "red") +
+  facet_wrap(~type) + theme_bw() + ylim(c(0.5,1))+
     theme(strip.background = element_rect(color="black", fill="skyblue", size=2, linetype="solid"))+
   theme(strip.text.x = element_text(size = 12))+
-  geom_hline(yintercept = 0.8, col = "black") + xlab("\nNo. of Groups(K)") + ylab("Coverage\n") +
-  theme(plot.title = element_text(hjust = 0.5)) + theme(legend.position = "None")+ theme(axis.text=element_text(size=12),axis.title=element_text(size=12)) 
-#ggsave("~/Project with Rina/Corrected GWCP New.pdf",width = 8,height = 4,plot = last_plot())
+  geom_hline(yintercept = 0.8, col = "black") + xlab(expression(paste("\nNumber of groups ",italic(K)))) + ylab("Coverage\n") +
+  theme(plot.title = element_text(hjust = 0.5)) + theme(axis.text=element_text(size=12),axis.title=element_text(size=12)) +
+  theme(legend.title = element_text(size=12),legend.text = element_text(size=12))+
+  theme(axis.title.x = element_text(vjust = -1))
+ggsave("~/Project with Rina/Corrected GWCP New.pdf",width = 8,height = 4,plot = last_plot())
 ```
 
 
